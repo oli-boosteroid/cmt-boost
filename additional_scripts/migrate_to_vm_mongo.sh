@@ -33,8 +33,15 @@ norm_uri() {
   case "$rest" in */*) ;; *) base="$base/" ;; esac
   printf '%s?%s' "$base" "${u#*\?}"
 }
-SRC_MONGODB_URI="$(norm_uri "$SRC_MONGODB_URI")"
-SRC_SNAPSHOT_URI="$(norm_uri "$SRC_SNAPSHOT_URI")"
+# Without authSource the tools look for the user in the --db database; pymongo (the bot) uses "admin".
+with_authsource() {
+  local u="$1"
+  case "$u" in *authSource=*|mongodb+srv://*) printf '%s' "$u"; return ;; esac
+  case "$u" in *\?*) printf '%s&authSource=admin' "$u"; return ;; esac
+  case "${u#*://}" in */*) printf '%s?authSource=admin' "$u" ;; *) printf '%s/?authSource=admin' "$u" ;; esac
+}
+SRC_MONGODB_URI="$(with_authsource "$(norm_uri "$SRC_MONGODB_URI")")"
+SRC_SNAPSHOT_URI="$(with_authsource "$(norm_uri "$SRC_SNAPSHOT_URI")")"
 DST_URI="$(norm_uri "$DST_URI")"
 
 DOCKER="${CMT_DOCKER:-sudo docker}"
