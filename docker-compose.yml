@@ -3,6 +3,9 @@ services:
     build: .
     container_name: cmt-boost
     restart: unless-stopped
+    logging:                  # Docker keeps at most 5 x 10 MB of console log
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
     ports:
       - "7000:7000"           # Slack events only (firewall: Slack IPs). The Jira gateway (7001) is NOT published:
     expose:                   # only containers on cmt-net (the console) reach it.
