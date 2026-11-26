@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Copy the bot + console databases from MongoDB Atlas (main) and the Railway Mongo (snapshots) into the
-# MongoDB on the VM. Uses the official mongo image for mongodump / mongorestore, nothing to install.
+# Copy the bot + console databases from MongoDB Atlas (main) and the Railway Mongo (snapshots) into our
+# MongoDB container on the VM (cmt-mongo, deploy/mongo/). Uses the official mongo image for mongodump /
+# mongorestore, nothing to install.
 # Order: rehearse first (dump + restore into *_rehearsal databases, compare counts), then final in a
 # maintenance window with the bot and the console stopped. Rollback: point MONGODB_URI back at the old database.
 #
@@ -11,9 +12,9 @@
 # Connection strings come from a file that is never printed (chmod 600), default ~/.cmt_migrate.env:
 #   SRC_MONGODB_URI=mongodb+srv://<read-only user>@<atlas>/          SRC_MONGODB_DATABASE=reddit_posts
 #   SRC_SNAPSHOT_URI=mongodb://<user>@<railway tcp proxy>/           SRC_SNAPSHOT_DATABASE=reddit_snapshots
-#   DST_URI=mongodb://<admin or cmt_bot user>@<vm mongo host>:27017/?authSource=admin
+#   DST_URI=mongodb://admin:<MONGO_ADMIN_PASSWORD from deploy/mongo/mongo.env>@cmt-mongo:27017/?authSource=admin&replicaSet=rs0
 #   DST_MONGODB_DATABASE=reddit_posts                                DST_SNAPSHOT_DATABASE=reddit_snapshots
-#   DOCKER_NETWORK=host        (or the Docker network the VM Mongo is on)
+#   (DOCKER_NETWORK defaults to cmt-net, where cmt-mongo lives)
 #
 # The dump stays in ~/cmt-migrate (chmod 700) only until the move is verified - delete it afterwards
 # (it holds user conversations).
@@ -26,7 +27,7 @@ ENV_FILE="${CMT_MIGRATE_ENV:-$HOME/.cmt_migrate.env}"
 set -a; . "$ENV_FILE"; set +a
 DOCKER="${CMT_DOCKER:-sudo docker}"
 IMAGE="${MONGO_TOOLS_IMAGE:-mongo:7.0}"
-NET="${DOCKER_NETWORK:-host}"
+NET="${DOCKER_NETWORK:-cmt-net}"
 WORK="$HOME/cmt-migrate"; mkdir -p "$WORK"; chmod 700 "$WORK"
 SUFFIX=""; [ "$MODE" = rehearse ] && SUFFIX="_rehearsal"
 c() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -54,9 +55,10 @@ tool "mongorestore --uri=\"\$DST_URI\" --archive=/work/main.archive --gzip --dro
 tool "mongorestore --uri=\"\$DST_URI\" --archive=/work/snap.archive --gzip --drop \
       --nsFrom='$SRC_SNAPSHOT_DATABASE.*' --nsTo='${DST_SNAPSHOT_DATABASE}${SUFFIX}.*'"
 
-c "Done in $(( $(date +%s) - start )) s. Now compare counts (read-only):"
+c "Done in $(( $(date +%s) - start )) s. Now compare counts (read-only), from ~/cmt-boost:"
+echo "  set -a; . $ENV_FILE; set +a"
 echo "  sudo docker compose run --rm -e SRC_MONGODB_URI -e SRC_SNAPSHOT_URI \\"
-echo "    -e MONGODB_URI=\"<vm uri>\" -e MONGODB_DATABASE=${DST_MONGODB_DATABASE}${SUFFIX} \\"
+echo "    -e MONGODB_URI=\"<DST_URI from ~/.cmt_migrate.env (admin: cmt_bot cannot read *_rehearsal)>\" -e MONGODB_DATABASE=${DST_MONGODB_DATABASE}${SUFFIX} \\"
 echo "    -e SNAPSHOT_MONGODB_DATABASE=${DST_SNAPSHOT_DATABASE}${SUFFIX} cmt-boost python additional_scripts/compare_counts.py"
 [ "$MODE" = rehearse ] && echo "Rehearsal databases can be dropped after the check: db.getSiblingDB('<name>_rehearsal').dropDatabase()"
 echo "Delete the dump when finished:  rm -rf $WORK"
