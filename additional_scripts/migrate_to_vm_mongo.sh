@@ -25,6 +25,18 @@ for v in SRC_MONGODB_URI SRC_MONGODB_DATABASE SRC_SNAPSHOT_URI SRC_SNAPSHOT_DATA
   [ -n "${!v:-}" ] || { echo "$v is empty in $ENV_FILE"; exit 2; }
 done
 
+# The mongo tools need a "/" before the options ("host/?a=b"); pymongo also accepts "host?a=b".
+norm_uri() {
+  local u="$1" base rest
+  case "$u" in *\?*) ;; *) printf '%s' "$u"; return ;; esac
+  base="${u%%\?*}"; rest="${base#*://}"
+  case "$rest" in */*) ;; *) base="$base/" ;; esac
+  printf '%s?%s' "$base" "${u#*\?}"
+}
+SRC_MONGODB_URI="$(norm_uri "$SRC_MONGODB_URI")"
+SRC_SNAPSHOT_URI="$(norm_uri "$SRC_SNAPSHOT_URI")"
+DST_URI="$(norm_uri "$DST_URI")"
+
 DOCKER="${CMT_DOCKER:-sudo docker}"
 IMAGE="${MONGO_TOOLS_IMAGE:-mongo:7.0}"
 BOT_IMAGE="${CMT_BOT_IMAGE:-cmt-boost-cmt-boost}"
