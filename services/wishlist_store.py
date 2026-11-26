@@ -104,7 +104,7 @@ def request_note(game, who, manual=False) -> str:
     return "Additional wishlist request for *%s* (%s) - requested by %s (%s total)" % (title, platform, who, total)
 
 
-def set_status(key, status, note="", by="", now=None) -> dict:
+def set_status(key, status, note="", by="", now=None, quiet=False) -> dict:
     if status not in STATUSES:
         raise ValueError("unknown status: %s" % status)
     now = now or datetime.utcnow()
@@ -117,8 +117,44 @@ def set_status(key, status, note="", by="", now=None) -> dict:
         return_document=ReturnDocument.AFTER)
     if not game:
         raise ValueError("game not found")
-    logger.info("[Wishlist] %s (%s) -> %s by %s", game.get("title"), game.get("platform"), status, by)
+    if not quiet:
+        logger.info("[Wishlist] %s (%s) -> %s by %s", game.get("title"), game.get("platform"), status, by)
     return game
+
+
+# ---------------------------------------------------------------------------
+# Boosteroid catalog: a game counts as available only on the platform it was requested for
+# ---------------------------------------------------------------------------
+
+# Wishlist platform -> platform name in the Boosteroid catalog. "Other" (GOG etc.) has no catalog
+# platform, so such a request is never matched automatically.
+CATALOG_PLATFORMS = {"steam": "Steam", "epic": "Epic Games Store", "xbox": "Xbox", "battle.net": "Battle.net",
+                     "ea": "EA", "ubisoft": "Ubisoft Connect", "rockstar": "Rockstar Games"}
+_cat_index = {"src": None, "idx": {}}
+
+
+def _catalog_index():
+    """Catalog games grouped by comparable title (no "(Steam)"-style suffix), rebuilt when the catalog changes."""
+    from services import boosteroid_catalog_service as catalog
+    if _cat_index["src"] is not catalog._name_index:
+        from services.steam_service import norm_title
+        idx = {}
+        for g in catalog.catalog_games():
+            idx.setdefault(norm_title(g.get("name") or ""), []).append(g)
+        _cat_index.update(src=catalog._name_index, idx=idx)
+    return _cat_index["idx"]
+
+
+def catalog_match(title, platform):
+    """The catalog game for this title on this platform, or None."""
+    want = CATALOG_PLATFORMS.get(str(platform or "").strip().lower())
+    if not want:
+        return None
+    from services.steam_service import norm_title
+    for g in _catalog_index().get(norm_title(clean_title(str(title or ""))), []):
+        if want in (g.get("platform_names") or []):
+            return g
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -207,16 +243,24 @@ def post_weekly_summary(now=None, force=False):
 # ---------------------------------------------------------------------------
 
 def mark_added_from_catalog():
-    """Open / problematic games that now exist in the Boosteroid catalog become "added"."""
+    """Open / problematic games that are in the Boosteroid catalog on the requested platform become "added";
+    a game the catalog check marked added earlier goes back to "open" when that no longer holds (the game
+    left the catalog, or it was matched on another platform). Returns (added, reopened)."""
     from services import boosteroid_catalog_service as catalog
     if not catalog.catalog_loaded():
-        return 0
-    n = 0
-    for g in games_col().find({"status": {"$in": ["open", "problematic"]}}, {"key": 1, "title": 1}):
-        if catalog.find_in_catalog(g.get("title") or ""):
-            set_status(g["key"], "added", "Found in the Boosteroid catalog", by="catalog")
-            n += 1
-    return n
+        return 0, 0
+    added = reopened = 0
+    query = {"$or": [{"status": {"$in": ["open", "problematic"]}}, {"status": "added", "status_by": "catalog"}]}
+    for g in games_col().find(query, {"key": 1, "title": 1, "platform": 1, "status": 1}):
+        hit = catalog_match(g.get("title"), g.get("platform"))
+        if g.get("status") == "added":
+            if not hit:
+                set_status(g["key"], "open", by="catalog", quiet=True)
+                reopened += 1
+        elif hit:
+            set_status(g["key"], "added", "Found in the Boosteroid catalog", by="catalog", quiet=True)
+            added += 1
+    return added, reopened
 
 
 def import_legacy():
@@ -272,9 +316,9 @@ def _loop():
             post_weekly_summary()
             today = datetime.now(KYIV).date()
             if last_catalog_day != today:
-                n = mark_added_from_catalog()
-                if n:
-                    logger.info("[Wishlist] %s game(s) found in the catalog, marked added", n)
+                added, reopened = mark_added_from_catalog()
+                if added or reopened:
+                    logger.info("[Wishlist] catalog check: %s marked added, %s back to open", added, reopened)
                 last_catalog_day = today
         except Exception as e:
             logger.error("[Wishlist] housekeeping failed: %s", e)

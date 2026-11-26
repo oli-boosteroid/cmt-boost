@@ -21,7 +21,6 @@ from utils.general_utils import (
     extract_xbox_product_id,
     detect_store,
 )
-from services.boosteroid_catalog_service import find_in_catalog
 from services import wishlist_store
 
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -471,8 +470,8 @@ class WishlistCog(commands.Cog):
             )
             return
 
-        # ── Catalog check ──────────────────────────────────────────────────────
-        catalog_entry = find_in_catalog(game_name)
+        # ── Catalog check (same game on the same platform) ─────────────────────
+        catalog_entry = wishlist_store.catalog_match(game_name, entity_type)
         if catalog_entry:
             collection = catalog_entry.get("collection") or "—"
             boosteroid_id = catalog_entry.get("id")
