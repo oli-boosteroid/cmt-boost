@@ -98,3 +98,6 @@ data/
 # deploy/mongo secrets
 deploy/mongo/mongo.env
 deploy/mongo/keyfile
+
+# Documentation is kept outside the repositories
+*.md
