@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timedelta
 
 import pytz
-from pymongo import ReturnDocument
+from pymongo import ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from services.game_title import norm_game_title
@@ -54,6 +54,7 @@ def ensure_indexes():
     games_col().create_index([("status", 1), ("requests", -1)])
     requests_col().create_index([("created_at", -1)])
     requests_col().create_index([("game_key", 1), ("created_at", -1)])
+    requests_col().create_index("legacy_id", sparse=True)
 
 
 def game_key(title, platform) -> str:
@@ -223,18 +224,25 @@ def import_legacy():
     meta = _db()["wishlist_meta"]
     if meta.find_one({"_id": "legacy_import"}):
         return 0
-    first = {}
+    logger.info("[Wishlist] importing the old wishlist counters (one time)")
+    first, batch = {}, []
+    done = {d["legacy_id"] for d in requests_col().find({"legacy_id": {"$exists": True}}, {"legacy_id": 1})}
     for s in _db()["wishlist_submissions"].find({"added_to_wishlist": True, "title": {"$ne": None}}):
         key = game_key(s.get("title"), s.get("entity_type"))
         at = s.get("added_at") or s.get("submitted_at")
         if at and (key not in first or at < first[key]):
             first[key] = at
-        if not requests_col().find_one({"legacy_id": s["_id"]}):
-            requests_col().insert_one({"game_key": key, "title": clean_title(s.get("title") or ""),
-                                       "platform": s.get("entity_type") or "Other", "source": "discord",
-                                       "requestor": s.get("requestor_discord_name") or "", "author": "",
-                                       "url": s.get("url") or "", "created_at": at, "legacy_id": s["_id"]})
-    n = 0
+        if s["_id"] not in done:
+            batch.append({"game_key": key, "title": clean_title(s.get("title") or ""),
+                          "platform": s.get("entity_type") or "Other", "source": "discord",
+                          "requestor": s.get("requestor_discord_name") or "", "author": "",
+                          "url": s.get("url") or "", "created_at": at, "legacy_id": s["_id"]})
+        if len(batch) >= 500:
+            requests_col().insert_many(batch, ordered=False)
+            batch = []
+    if batch:
+        requests_col().insert_many(batch, ordered=False)
+    ops = []
     for c in _db()["wishlist_counts"].find():
         title = clean_title(str(c.get("title") or "")).strip()
         if not title:
@@ -242,13 +250,15 @@ def import_legacy():
         platform = c.get("entity_type") or "Other"
         key, count = game_key(title, platform), int(c.get("count") or 0)
         at = first.get(key)
-        games_col().update_one(
+        ops.append(UpdateOne(
             {"key": key},
             {"$setOnInsert": {"key": key, "title": title, "platform": platform, "status": "open",
                               "first_requested_at": at, "created_at": datetime.utcnow(), "last_requested_at": at},
              "$max": {"requests": count, "by_source.legacy": count}},
-            upsert=True)
-        n += 1
+            upsert=True))
+    for i in range(0, len(ops), 500):
+        games_col().bulk_write(ops[i:i + 500], ordered=False)
+    n = len(ops)
     meta.insert_one({"_id": "legacy_import", "at": datetime.utcnow(), "games": n})
     logger.info("[Wishlist] imported %s game(s) from the old wishlist counters", n)
     return n
