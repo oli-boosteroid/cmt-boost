@@ -190,14 +190,13 @@ def run_async_tracker():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Effective Reddit ignore list = .env IGNORED_USERS + console exclusions + linked team accounts
-    # Falls back to .env if Mongo is unavailable, so startup is safe with no links yet.
+    # Reddit ignore list = the console admin exclusions + the team's linked Reddit accounts.
     try:
         from services.identity_service import get_ignored_reddit_users
         ignored_users = ','.join(get_ignored_reddit_users())
     except Exception as e:
-        logger.warning('[Startup] identity ignore list fell back to .env: %s', e)
-        ignored_users = os.getenv('IGNORED_USERS', '')
+        logger.warning('[Startup] Reddit ignore list unavailable: %s', e)
+        ignored_users = ''
     loop.run_until_complete(start_tracking(ignored_users))
 
 def run_discord_bot():

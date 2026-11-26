@@ -6,15 +6,10 @@ member's accounts (alias + Slack/Telegram/Jira/Discord ids + Reddit username) on
 `console_users` collection, and keeps two "clean" exclusion lists in `console_config`
 (`ignored_reddit`, `moderators_discord`) for accounts NOT tied to a team member (Reddit bots etc.).
 
-The bot reads the EFFECTIVE values here: the .env value stays as a FALLBACK base and the Mongo
-data is overlaid on top. So with no accounts linked yet (today), every getter returns exactly the
-old .env behaviour, which keeps startup safe; as the admin fills profiles in, the bot picks them up
-(within the short TTL cache) without a redeploy.
-
-Every getter is wrapped so a Mongo hiccup can never break the caller - it just falls back to .env.
-Mongo access is imported lazily inside the functions to avoid any import-time coupling/cycles.
+The console is the only source (no .env lists): changes in the console reach the bot within the
+short TTL cache, without a redeploy. A Mongo hiccup never breaks the caller; the getter logs it and
+returns what it could read. Mongo access is imported lazily inside the functions to avoid import cycles.
 """
-import os
 import time
 import logging
 
@@ -55,22 +50,6 @@ def _config_list(key):
         return []
 
 
-def _env_csv(name):
-    return [x.strip() for x in os.getenv(name, "").split(",") if x.strip()]
-
-
-def _console_only():
-    """When the admin marks the console Identity authoritative (console_config.identity_console_only),
-    the bot uses ONLY console_users data and drops the .env fallback lists - so a stale .env entry cannot
-    leak a non-Identity account into mentions/notifications. Default off = the .env + console union."""
-    try:
-        from services.mongo_db_service import sync_db
-        d = sync_db["console_config"].find_one({"key": "identity_console_only"})
-        return bool((d or {}).get("value"))
-    except Exception:
-        return False
-
-
 def _alias_of(u):
     return (u.get("alias") or (u.get("email", "") or "").split("@")[0] or "").strip()
 
@@ -78,7 +57,7 @@ def _alias_of(u):
 # ── Reddit ignore list (suppresses the bot's Slack alerts; the console still shows everything) ──
 def get_ignored_reddit_users():
     def _build():
-        result = set() if _console_only() else set(_env_csv("IGNORED_USERS"))   # .env fallback base (skipped when console-only)
+        result = set()                     # console only: admin exclusions + linked team accounts
         result |= set(_config_list("ignored_reddit"))       # clean exclusions (bots, non-team mods)
         col = _users()
         if col is not None:
@@ -96,7 +75,7 @@ def get_ignored_reddit_users():
 # ── Discord moderators (same idea, Discord side) ──
 def get_discord_moderators():
     def _build():
-        result = set() if _console_only() else set(_env_csv("MODERATORS"))   # .env fallback (skipped when console-only)
+        result = set()                     # console only: admin list + linked team accounts
         result |= set(_config_list("moderators_discord"))
         col = _users()
         if col is not None:

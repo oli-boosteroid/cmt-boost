@@ -34,7 +34,6 @@ def _notify_bg(event_type, title, body="", url=""):
         logger.debug("[Discord] console notify (%s) failed to start: %s", event_type, e)
 
 
-MODERATORS = [m.strip() for m in os.getenv('MODERATORS', '').split(',')]
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 ELITE_ROLE_ID = int(os.getenv('DISCORD_ELITE_ROLE_ID', 0))
 
@@ -174,8 +173,9 @@ class DiscordBot:
                 try:
                     from services.identity_service import get_discord_moderators
                     _img_mods = get_discord_moderators()
-                except Exception:
-                    _img_mods = MODERATORS
+                except Exception as _e:
+                    logger.warning("[Discord] moderator list unavailable: %s", _e)
+                    _img_mods = []
                 if message.author.name in _img_mods or getattr(message.author, "display_name", "") in _img_mods:
                     img_count = 0
             if img_count:   # whitelisted users: permanent (console admin) or 2-day (Telegram button)
@@ -222,13 +222,13 @@ class DiscordBot:
 
             chat_name = message.channel.name
 
-            # Effective moderator list = .env MODERATORS + console exclusions + linked team
-            # Discord accounts; falls back to the .env MODERATORS on any Mongo issue.
+            # Moderators = the console admin list + the team's linked Discord accounts.
             try:
                 from services.identity_service import get_discord_moderators
                 _mods = get_discord_moderators()
-            except Exception:
-                _mods = MODERATORS
+            except Exception as _e:
+                logger.warning("[Discord] moderator list unavailable: %s", _e)
+                _mods = []
             mentioned_mods = [
                 user for user in message.mentions
                 if user.name in _mods or user.display_name in _mods

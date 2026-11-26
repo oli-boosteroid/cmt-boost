@@ -640,8 +640,8 @@ async def _process_modmail_convo(convo, ignored_users_list):
                 if await _is_seen_modmail_message(convo_id, message_id):
                     continue
 
-                # Mods-only (internal) messages are written by moderators, who are all in
-                # IGNORED_USERS. Detect Jira keys / active-maintenance names BEFORE the
+                # Mods-only (internal) messages are written by moderators, who are all on
+                # the ignore list. Detect Jira keys / active-maintenance names BEFORE the
                 # ignored-author skip, otherwise they would never be processed. These
                 # messages are not forwarded to the Slack modmail channel.
                 if is_internal:
