@@ -24,9 +24,9 @@ def _author_mention(author_email, author_display):
     account_id = None
     if author_email:
         try:
-            from jira_notifications.jira_notifications import OUR_JIRA_USER_MAP
+            from services.identity_service import get_jira_our_user_map
             alias = author_email.split('@')[0]
-            alias_to_id = {v: k for k, v in OUR_JIRA_USER_MAP.items()}
+            alias_to_id = {v: k for k, v in get_jira_our_user_map().items()}
             account_id = alias_to_id.get(alias)
         except Exception:
             account_id = None

@@ -121,13 +121,7 @@ def get_image_whitelist_discord():
 # ── Slack: alias -> Slack user id (for @mentions and per-user stats) ──
 def get_slack_user_ids():
     def _build():
-        mapping = {}
-        if not _console_only():                                       # .env fallback base 
-            for entry in os.getenv("SLACK_USER_IDS", "").split(","):
-                if ":" in entry:
-                    a, s = entry.strip().split(":", 1)
-                    if a.strip() and s.strip():
-                        mapping[a.strip()] = s.strip()
+        mapping = {}                       # console profiles only (no .env list)
         col = _users()
         if col is not None:
             try:
@@ -144,14 +138,7 @@ def get_slack_user_ids():
 # ── Jira: accountId -> alias (our team). accountId is the full Atlassian id (e.g. "712020:uuid"). ──
 def get_jira_our_user_map():
     def _build():
-        mapping = {}
-        if not _console_only():                                      # .env fallback base 
-            for pair in os.getenv("JIRA_OUR_USER_IDS", "").split(","):
-                parts = pair.strip().split(":", 2)
-                if len(parts) == 3 and parts[0]:
-                    mapping[f"{parts[0]}:{parts[1]}"] = parts[2]
-                elif len(parts) == 2 and parts[0]:
-                    mapping[parts[0]] = parts[1]
+        mapping = {}                       # console profiles only (no .env list)
         col = _users()
         if col is not None:
             try:

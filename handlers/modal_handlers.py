@@ -26,8 +26,6 @@ load_dotenv(env_path)
 
 logger = logging.getLogger(__name__)
 
-SLACK_MAINTENANCE_API_URL = os.getenv('SLACK_BOT_API_MAINTENANCE_URL')
-
 
 
 def _saved_msg(value, target):

@@ -2696,7 +2696,7 @@ class ModMail(commands.Cog):
                 await msg.pin()
             except Exception as _e:
                 logger.debug("ignored: %s", _e)
-            # Record the linkage in the console transcript too (item #7b): a mods-only note so the
+            # Record the linkage in the console transcript too: a mods-only note so the
             # console shows "Jira Ticket Linked" the same way the Discord channel does.
             try:
                 _now = datetime.utcnow()

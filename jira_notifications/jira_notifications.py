@@ -35,27 +35,7 @@ SLACK_JIRA_CHANNEL_ID = os.getenv('SLACK_JIRA_CHANNEL_ID', '')
 SLACK_TOKEN = os.getenv('SLACK_TOKEN', '')
 JIRA_BASE_URL = os.getenv('JIRA_BASE_URL', '').rstrip('/')
 
-# Maps alias → Slack user ID for @mentions  (same format as SLACK_USER_IDS elsewhere)
-# Format: SLACK_USER_IDS=o.teleshko:U08ABC123,m.yeromenko:U09XYZ456
-_SLACK_USER_ID_MAP: dict[str, str] = {}
-for _su_entry in os.getenv('SLACK_USER_IDS', '').split(','):
-    if ':' in _su_entry:
-        _su_alias, _su_id = _su_entry.strip().split(':', 1)
-        if _su_alias and _su_id:
-            _SLACK_USER_ID_MAP[_su_alias.strip()] = _su_id.strip()
-
-# Maps Jira accountId → display alias for our team members
-# Format: JIRA_OUR_USER_IDS=prefix:uuid:alias,...  (Atlassian Cloud accountId = "prefix:uuid")
-# Fallback: accountId:alias (for non-prefix formats)
-OUR_JIRA_USER_MAP: dict[str, str] = {}
-for _pair in os.getenv('JIRA_OUR_USER_IDS', '').split(','):
-    _parts = _pair.strip().split(':', 2)
-    if len(_parts) == 3 and _parts[0]:
-        _account_id = f'{_parts[0]}:{_parts[1]}'
-        OUR_JIRA_USER_MAP[_account_id] = _parts[2]
-    elif len(_parts) == 2 and _parts[0]:
-        OUR_JIRA_USER_MAP[_parts[0]] = _parts[1]
-OUR_JIRA_ACCOUNT_IDS: set[str] = set(OUR_JIRA_USER_MAP.keys())
+# Our team's Jira and Slack accounts come from the console profiles only (services/identity_service.py).
 
 CM_IN_PROGRESS = 'CM In Progress'
 L1_IN_PROGRESS = 'L1 In Progress'
@@ -308,10 +288,8 @@ def _slack_id_for_jira_account(account_id: str) -> str | None:
         alias = get_jira_our_user_map().get(account_id)
         if alias:
             return get_slack_user_ids().get(alias)
-    except Exception:
-        alias = OUR_JIRA_USER_MAP.get(account_id)
-        if alias:
-            return _SLACK_USER_ID_MAP.get(alias)
+    except Exception as e:
+        logger.warning("[Jira] team account lookup failed: %s", e)
     return None
 
 
@@ -370,12 +348,8 @@ def _urg_ticket_is_ours(issue_key: str) -> bool:
         from services.jira_service import get_issue_reporter
         acc = (get_issue_reporter(issue_key) or {}).get('accountId', '')
         if acc:
-            try:
-                from services.identity_service import get_jira_our_user_map
-                our_map = get_jira_our_user_map()
-            except Exception:
-                our_map = OUR_JIRA_USER_MAP
-            if acc in our_map:
+            from services.identity_service import get_jira_our_user_map
+            if acc in get_jira_our_user_map():
                 return True
     except Exception as _e:
         logger.warning("ignored: %s", _e)

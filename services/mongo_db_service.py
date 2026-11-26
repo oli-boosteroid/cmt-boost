@@ -38,15 +38,6 @@ try:   # self-prune: a URG dedup record is useless once older than the dedup win
 except Exception as _e:
     logger.warning("ignored: %s", _e)
 
-# Mapping: alias -> Slack user ID
-# Format: SLACK_USER_IDS=o.teleshko:U08ABC123,m.yeromenko:U09XYZ456
-_slack_user_ids: dict[str, str] = {}
-for _entry in os.getenv("SLACK_USER_IDS", "").split(","):
-    if ":" in _entry:
-        _alias, _sid = _entry.strip().split(":", 1)
-        if _alias and _sid:
-            _slack_user_ids[_alias.strip()] = _sid.strip()
-
 # Async client (Motor)
 from motor.motor_asyncio import AsyncIOMotorClient
 # Motor (async) client: used only from the Reddit event loop (reddit_notifications shares it).

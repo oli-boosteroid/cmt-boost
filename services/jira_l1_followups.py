@@ -2,7 +2,7 @@
 "Ticket reached L1 In Progress -> tell the users we promised to update."
 
 When an SO ticket moves to **L1 In Progress** we look at who is waiting on it:
-  * comments written by OUR team (Jira accounts linked in the console / JIRA_OUR_USER_IDS) that carry a
+  * comments written by OUR team (Jira accounts linked in the console profiles) that carry a
     Boosteroid User ID, a streaming session ID, or a link to a Discord ticket / Reddit modmail chat;
   * chats linked to the ticket in our own data (Discord tickets with the key, Reddit modmail convos linked
     to it) and the ticket's Communication Link.
