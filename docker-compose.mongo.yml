@@ -1,0 +1,16 @@
+# Joins the bot to the Docker network of the VM's existing MongoDB container (port 27017 is not published
+# on the host, so only containers on that network reach it; the host in MONGODB_URI is the container name).
+#
+# Enable in the bot's .env (docker compose reads it for variable substitution):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.mongo.yml
+#   MONGO_NETWORK=<network of the mongodb container>
+# Find the network:  sudo docker inspect mongodb --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+
+services:
+  cmt-boost:
+    networks: [cmt, mongo]
+
+networks:
+  mongo:
+    name: ${MONGO_NETWORK:?set MONGO_NETWORK in .env}
+    external: true

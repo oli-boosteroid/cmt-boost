@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  cmt-boost:
+    build: .
+    container_name: cmt-boost
+    restart: unless-stopped
+    ports:
+      - "7000:7000"           # Slack events only (firewall: Slack IPs). The Jira gateway (7001) is NOT published:
+    expose:                   # only containers on cmt-net (the console) reach it.
+      - "7001"
+    networks:
+      - cmt
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro   # secrets stay on the VM, not in the image
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7000/healthz')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+
+networks:
+  cmt:
+    name: cmt-net             # shared with the console's docker-compose.vm.yml
