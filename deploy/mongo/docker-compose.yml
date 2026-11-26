@@ -1,28 +1,18 @@
-# Our MongoDB on the VM. A compose project of its own, so ~/deploy.sh (bot) and ~/deploy-console.sh never stop
-# or recreate the database. See cmt-console docs/vm-deploy.md, section "MongoDB".
-#
-#   first start (once):   ./init.sh
-#   status:               sudo docker compose ps
-#   restart:              sudo docker compose restart
-#
-# Never run "docker compose down -v" here: -v deletes the data volume.
+# MongoDB for the bot and the console, in its own compose project so their deploys do not restart it.
+# First start: ./init.sh. Do not use "docker compose down -v" here, it removes the data volume.
 name: cmt-mongo
 
 services:
   cmt-mongo:
-    # 4.4.6: newer MongoDB (5.0+) needs the AVX CPU instructions, which this VM does not provide reliably.
-    # Pinned on purpose; the 4.4 image has the legacy "mongo" shell, not mongosh.
-    image: mongo:4.4.6
+    image: mongo:4.4.6        # 5.0+ needs AVX, which this VM does not have
     container_name: cmt-mongo
     hostname: cmt-mongo
     restart: unless-stopped
-    # Single-node replica set: change streams let the bot run console actions at once.
     command: ["mongod", "--replSet", "rs0", "--keyFile", "/etc/mongo/keyfile", "--bind_ip_all",
               "--wiredTigerCacheSizeGB", "0.5"]
     volumes:
       - cmt-mongo-data:/data/db
       - ./keyfile:/etc/mongo/keyfile:ro
-    # No "ports": only containers on cmt-net (bot, console) reach the database.
     networks: [cmt]
     mem_limit: 1200m
     cpus: 2.0

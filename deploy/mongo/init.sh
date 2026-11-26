@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
-#
-# First start of our MongoDB on the VM. Run once, from this folder:   cd ~/cmt-boost/deploy/mongo && ./init.sh
-#
-#   1. checks the Docker network cmt-net (created by the bot);
-#   2. creates the replica-set key file and random passwords (mongo.env, chmod 600, never in git);
-#   3. starts the container (MongoDB 4.4.6), sets up the single-node replica set rs0;
-#   4. creates the users: admin (root, maintenance only), cmt_bot, cmt_console, cmt_backup;
-#   5. prints the connection strings for the bot .env and the console deploy/console.env.
-#
-# It refuses to run again once mongo.env exists (the database is already set up).
-# The 4.4 image has the legacy "mongo" shell (no mongosh).
+# One-time setup of cmt-mongo: key file, passwords in mongo.env, replica set rs0, users.
+# Usage: cd ~/cmt-boost/deploy/mongo && ./init.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -18,14 +9,14 @@ c()   { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mx %s\033[0m\n' "$*" >&2; exit 1; }
 mongo_eval() { $DOCKER exec cmt-mongo mongo --quiet --eval "$1" </dev/null 2>/dev/null; }
 
-[ -f mongo.env ] && die "mongo.env exists: the database is already set up (see docs/vm-deploy.md to start over)"
-$DOCKER network inspect cmt-net >/dev/null 2>&1 || die "Docker network cmt-net not found: deploy the bot first (~/deploy.sh)"
+[ -f mongo.env ] && die "mongo.env exists, the database is already set up"
+$DOCKER network inspect cmt-net >/dev/null 2>&1 || die "Docker network cmt-net not found, deploy the bot first"
 command -v openssl >/dev/null || die "openssl is not installed"
 
 c "Key file and passwords"
 if [ ! -f keyfile ]; then
   openssl rand -base64 756 > keyfile
-  sudo chown 999:999 keyfile            # the mongodb user inside the image
+  sudo chown 999:999 keyfile
   sudo chmod 400 keyfile
 fi
 gen() { openssl rand -hex 24; }
@@ -58,8 +49,7 @@ for i in $(seq 1 30); do
 done
 
 c "Users"
-# The script goes in through stdin into a temporary file inside the container, so no password shows up in
-# any process list. The first user is created through MongoDB's localhost exception (no users exist yet).
+# Passwords go through stdin, not command-line arguments.
 $DOCKER exec -i cmt-mongo sh -c 'cat > /tmp/cmt-init.js' <<EOF
 var admin = db.getSiblingDB("admin");
 admin.createUser({ user: "admin", pwd: "$ADMIN_PW", roles: ["root"] });
@@ -73,18 +63,16 @@ print("users: " + admin.getUsers().map(function (u) { return u.user; }).join(", 
 EOF
 $DOCKER exec cmt-mongo sh -c 'mongo --quiet /tmp/cmt-init.js; rc=$?; rm -f /tmp/cmt-init.js; exit $rc' </dev/null
 
-c "Done. Connection strings (keep them private; they are also in $(pwd)/mongo.env)"
+c "Done. Connection strings (also in mongo.env):"
 q="authSource=admin&replicaSet=rs0"
 cat <<EOF
 
-Bot  ~/cmt-boost/.env  (replace the Atlas / Railway lines ONLY at the migration step):
+Bot, ~/cmt-boost/.env:
   MONGODB_URI=mongodb://cmt_bot:$BOT_PW@cmt-mongo:27017/?$q
   SNAPSHOT_MONGODB_URI=mongodb://cmt_bot:$BOT_PW@cmt-mongo:27017/?$q
 
-Console  ~/cmt-console/deploy/console.env:
+Console, ~/cmt-console/deploy/console.env:
   MONGODB_URI=mongodb://cmt_console:$CONSOLE_PW@cmt-mongo:27017/?$q
   SNAPSHOT_MONGODB_URI=mongodb://cmt_console:$CONSOLE_PW@cmt-mongo:27017/?$q
 
-Daily dump (as root):  sudo crontab -e   and add
-  30 3 * * * $(pwd)/dump.sh >> /var/log/cmt-mongo-dump.log 2>&1
 EOF

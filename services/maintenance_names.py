@@ -6,7 +6,7 @@ import unicodedata
 logger = logging.getLogger(__name__)
 
 # "[Brazil]" anywhere in a game name (any case, inner spaces, full-width brackets) marks a Brazil-only
-# maintenance. Matched loosely because a strict endswith("[brazil]") missed real names in production.
+# maintenance.
 _BRAZIL_TAG = re.compile(r"\s*[\[(（［]\s*brazil\s*[\])）］]\s*", re.IGNORECASE)
 
 

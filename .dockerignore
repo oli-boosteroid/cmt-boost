@@ -13,5 +13,5 @@ download
 *.rar
 *.log
 
-# VM-only files: database compose project, its passwords and key file
+# VM-only files
 deploy/

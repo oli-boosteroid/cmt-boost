@@ -95,6 +95,6 @@ data/
 # Local tool folders (editor/assistant settings), not part of the project
 .claude/
 
-# Our MongoDB on the VM: generated passwords and replica-set key (deploy/mongo/init.sh)
+# deploy/mongo secrets
 deploy/mongo/mongo.env
 deploy/mongo/keyfile

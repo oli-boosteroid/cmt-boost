@@ -3,18 +3,18 @@ services:
     build: .
     container_name: cmt-boost
     restart: unless-stopped
-    logging:                  # Docker keeps at most 5 x 10 MB of console log
+    logging:
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
     ports:
-      - "7000:7000"           # Slack events only (firewall: Slack IPs). The Jira gateway (7001) is NOT published:
-    expose:                   # only containers on cmt-net (the console) reach it.
+      - "7000:7000"           # Slack events
+    expose:                   # Jira gateway, Docker network only
       - "7001"
     networks:
       - cmt
     volumes:
       - ./data:/app/data
-      - ./.env:/app/.env:ro   # secrets stay on the VM, not in the image
+      - ./.env:/app/.env:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7000/healthz')"]
       interval: 30s
@@ -24,4 +24,4 @@ services:
 
 networks:
   cmt:
-    name: cmt-net             # shared with the console's docker-compose.vm.yml
+    name: cmt-net

@@ -1,10 +1,5 @@
 """
-Only real Google Apps Script web-app URLs may receive the bot's sheet secrets.
-
-The web-app URL of each sheet integration can be set from the console admin page (console_config), and
-the bot then sends its shared secret and data there. A wrong or hostile value would hand that secret to
-another server, or make the bot call an address inside the company network. So every URL is checked
-against the shapes Google uses for deployed web apps; anything else is treated as "not configured".
+Accept only Google Apps Script web-app URLs for the sheet integrations; anything else counts as not configured.
 """
 import logging
 import re

@@ -1,26 +1,19 @@
 """
-Bot-side authorization for the console_actions queue.
+Checks every console action before the worker runs it.
 
-The console checks permissions before it enqueues an action, but the bot must not rely on that alone:
-anyone who can write to the queue collection (a compromised console, a leaked connection string) could
-otherwise make the bot reply to customers, create tickets or edit the Google Sheets. So every action is
-checked here again, right before it runs:
+  - the type must be known;
+  - an action with an author needs an existing console user with the section permission
+    (admin-only types need an admin);
+  - an action without an author is allowed only for a few system types, in the shape the console produces.
 
-  - the type must be one the worker knows;
-  - an action with an author must come from an existing console user who holds the section permission
-    for it (admins pass), and admin-only types need the admin role;
-  - an action without an author ("system", queued by the console server itself) is allowed only for a
-    short list of low-impact types, and only in the shape the console server produces.
-
-`check(action, users_col)` returns None when the action may run, or a short English reason when not.
+check(action, users_col) returns None when the action may run, otherwise the reason.
 """
 import os
 import threading
 import time
 from collections import defaultdict, deque
 
-# Look-ups in the Boosteroid cloud admin (an account's state / sessions) per requester per hour. Normal work
-# is a handful an hour; the limit only stops someone (or a leaked extension key) from walking through accounts.
+# Cloud account look-ups per requester per hour.
 CLOUD_LOOKUP_LIMIT_PER_HOUR = int(os.getenv("CLOUD_LOOKUP_LIMIT_PER_HOUR") or 120)
 _CLOUD_TYPES = {"cloud_user_lookup", "cloud_sessions"}
 _lookups = defaultdict(deque)
@@ -79,8 +72,7 @@ def _system_ok(action):
     if atype == "maintenance_sheet_add":
         return True                                    # one row in the maintenance log sheet
     if atype == "notify_user_dm" and source == "leave":
-        # DM to a staff member about their leave request: only to a console user and only with a link
-        # to the console itself, so the queue cannot be used to send arbitrary links to the team.
+        # leave-request DM: target is a console user, the link points to the console
         url = str(payload.get("url") or "")
         return not url or url.startswith(_console_url().split("/console")[0])
     if atype == "schedule_set" and source == "leave":

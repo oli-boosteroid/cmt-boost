@@ -1,15 +1,12 @@
 """
-READ-ONLY check after a database move: documents and indexes per collection, source vs target.
+Compare a moved database with its source: document counts and indexes per collection. Read-only.
 
-    python additional_scripts/compare_counts.py                # counts on both sides, differences marked
-    python additional_scripts/compare_counts.py --target-only  # just list what the target has
+    python additional_scripts/compare_counts.py
+    python additional_scripts/compare_counts.py --target-only
 
-Environment (nothing is written anywhere):
-    SRC_MONGODB_URI, SRC_MONGODB_DATABASE (default reddit_posts)              old main database (Atlas)
-    SRC_SNAPSHOT_URI, SRC_SNAPSHOT_DATABASE (default reddit_snapshots)        old snapshot database (Railway)
-    MONGODB_URI, MONGODB_DATABASE, SNAPSHOT_MONGODB_URI, SNAPSHOT_MONGODB_DATABASE   new databases (VM)
-Exit code 1 when a collection has a different document count or is missing an index on the target.
-Collections that grow on their own while both sides run (queues, rate rows) can differ by a few documents.
+Source: SRC_MONGODB_URI / SRC_MONGODB_DATABASE, SRC_SNAPSHOT_URI / SRC_SNAPSHOT_DATABASE.
+Target: MONGODB_URI / MONGODB_DATABASE, SNAPSHOT_MONGODB_URI / SNAPSHOT_MONGODB_DATABASE.
+Exits with 1 when a count differs or an index is missing on the target.
 """
 import os
 import sys

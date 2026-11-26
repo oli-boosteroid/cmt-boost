@@ -1,25 +1,12 @@
 """
-Game / server maintenances driven by the Mattermost admin events.
+Game and server maintenances from the Mattermost admin events (stored by mattermost_events.py).
 
-services/mattermost_events.py stores every admin-service message in `mm_events`. For each NEW maintenance
-event this module does the following:
-  start (game / server)  -> Slack message in the games / servers maintenance channel, record in
-                            `active_maintenances` (console Maintenance tab, Discord/Reddit "!maintenance"),
-                            for a game: a row in the maintenance Google Sheet;
-  end                    -> Slack "finished" message with the duration, record removed.
-A game whose name carries "[Brazil]", or a regional maintenance in Brazil, is a Brazil-only maintenance
-(type "brazil"), exactly like the webhook's "[Brazil]" rule. Other regional maintenances only stay in the
-Events feed, as before.
+  start -> Slack message, active_maintenances record, maintenance sheet row for games
+  end   -> Slack "finished" message with the duration, record removed
 
-End-of-maintenance messages to subscribed users (Discord / Reddit) are not flagged at once: they wait
-mattermost_events.NOTIFY_DELAY_SECONDS (games 1 h, servers 30 min) and go out only if
-maintenance_really_ended() still says yes (the game was not removed and did not go into maintenance again).
-
-Safety:
-  - every event is applied at most once (`maint_applied` flag, set atomically);
-  - events older than the moment this module was first switched on are never applied, so the first start
-    (which back-reads up to MM_BACKFILL_HOURS) does not replay old maintenances into Slack;
-  - MM_MAINTENANCE=0 switches the whole thing off (the Events feed keeps working).
+"[Brazil]" in a game name, or a regional maintenance in Brazil, gives type "brazil". Subscriber notices for an
+end wait NOTIFY_DELAY_SECONDS and go out only if maintenance_really_ended(). Each event is applied once, events
+older than the first start are skipped, MM_MAINTENANCE=0 turns it off.
 """
 import asyncio
 import logging
@@ -137,7 +124,7 @@ def apply(post_id: str) -> str:
     if store_type == "brazil":
         remove_active_maintenance(entity, "game")       # a record from before the Brazil split
     elif store_type == "game":
-        remove_active_maintenance(entity, "brazil")     # a game moved to Brazil by hand in the console
+        remove_active_maintenance(entity, "brazil")     # moved to Brazil in the console
     col.update_one({"_id": ev["_id"]}, {"$set": {"notify_pending": True}})
     logger.info(f"[MMMaintenance] {store_type} maintenance ended: {entity} (user notifications after the delay)")
     return "ended"

@@ -1,13 +1,11 @@
 """
-Our own game wishlist: every request from Discord, Slack and the console lands here (no external wishlist API).
+Game wishlist: requests from Discord, Slack, Telegram and the console.
 
-  wishlist_games     one row per game + platform (key "title|platform"): total requests, per-source counts,
-                     status (open / problematic / rejected / added) with a note and its history.
-  wishlist_requests  one row per request: who asked, where (discord / slack / console / telegram), when, link.
-  wishlist_weekly    the Monday summary of the previous week (Mon-Sun, Kyiv time), one row per week.
+  wishlist_games     one row per game + platform: request counts, status (open / problematic / rejected / added)
+  wishlist_requests  one row per request
+  wishlist_weekly    Monday summary of the previous week (Kyiv time)
 
-The console reads these collections directly (Wishlist tab) and changes a status through the
-wishlist_set_status action, which the bot worker runs here.
+The console reads these collections; status changes come through the wishlist_set_status action.
 """
 import logging
 import os
@@ -66,7 +64,7 @@ def _source(source):
 
 
 def add_request(title, platform, source, requestor="", author="", url="", now=None) -> dict:
-    """Record one request and return the game row after it (requests = new total, created = first request)."""
+    """Record a request; returns the game row with the new total and created=True for a new game."""
     title = clean_title(str(title or "")).strip()
     platform = str(platform or "Other").strip() or "Other"
     if not title:
@@ -126,15 +124,14 @@ def set_status(key, status, note="", by="", now=None, quiet=False) -> dict:
 # Boosteroid catalog: a game counts as available only on the platform it was requested for
 # ---------------------------------------------------------------------------
 
-# Wishlist platform -> platform name in the Boosteroid catalog. "Other" (GOG etc.) has no catalog
-# platform, so such a request is never matched automatically.
+# Wishlist platform -> catalog platform name. "Other" is never matched.
 CATALOG_PLATFORMS = {"steam": "Steam", "epic": "Epic Games Store", "xbox": "Xbox", "battle.net": "Battle.net",
                      "ea": "EA", "ubisoft": "Ubisoft Connect", "rockstar": "Rockstar Games"}
 _cat_index = {"src": None, "idx": {}}
 
 
 def _catalog_index():
-    """Catalog games grouped by comparable title (no "(Steam)"-style suffix), rebuilt when the catalog changes."""
+    """Catalog games grouped by normalized title; rebuilt when the catalog changes."""
     from services import boosteroid_catalog_service as catalog
     if _cat_index["src"] is not catalog._name_index:
         from services.steam_service import norm_title
@@ -211,7 +208,7 @@ def summary_text(week_start_date, s) -> str:
 
 
 def post_weekly_summary(now=None, force=False):
-    """On Monday from SUMMARY_HOUR (Kyiv), summarise the previous week once: save it and post it to Slack."""
+    """Monday from SUMMARY_HOUR (Kyiv): save the previous week's summary and post it to Slack."""
     now_kyiv = (now or datetime.now(pytz.utc)).astimezone(KYIV)
     if not force and (now_kyiv.weekday() != 0 or now_kyiv.hour < SUMMARY_HOUR):
         return None
@@ -220,7 +217,7 @@ def post_weekly_summary(now=None, force=False):
     s = weekly_summary(start, end)
     doc = dict(s, _id=week_id, week_start=start, week_end=end, created_at=datetime.utcnow(), slack=False)
     try:
-        weekly_col().insert_one(doc)          # the claim: one summary per week even with several workers
+        weekly_col().insert_one(doc)          # one summary per week
     except DuplicateKeyError:
         if not force:
             return None
@@ -243,9 +240,8 @@ def post_weekly_summary(now=None, force=False):
 # ---------------------------------------------------------------------------
 
 def mark_added_from_catalog():
-    """Open / problematic games that are in the Boosteroid catalog on the requested platform become "added";
-    a game the catalog check marked added earlier goes back to "open" when that no longer holds (the game
-    left the catalog, or it was matched on another platform). Returns (added, reopened)."""
+    """Mark games found in the catalog on their platform as added, reopen earlier catalog matches that no
+    longer hold. Returns (added, reopened)."""
     from services import boosteroid_catalog_service as catalog
     if not catalog.catalog_loaded():
         return 0, 0
@@ -264,7 +260,7 @@ def mark_added_from_catalog():
 
 
 def import_legacy():
-    """Once: seed wishlist_games from the old all-sources counter and the Discord submissions."""
+    """One-time import from wishlist_counts and wishlist_submissions."""
     meta = _db()["wishlist_meta"]
     if meta.find_one({"_id": "legacy_import"}):
         return 0

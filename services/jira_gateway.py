@@ -1,15 +1,9 @@
 """
-Internal Jira gateway for the CMT Console (console on the same VM).
+Jira gateway for the console: the console sends its Jira calls here and the bot adds the Jira credentials.
 
-The console holds no Jira credentials. It forwards each Jira call here (cmt-console/services/jira_http.py);
-the bot adds its own Jira credentials and passes the call on, but only:
-  - from the Docker network: this server listens on JIRA_GATEWAY_PORT (default 7001) inside the container
-    and the port is NOT published in docker-compose.yml;
-  - with the shared JIRA_GATEWAY_TOKEN (no token configured = gateway off);
-  - for the Jira paths the console actually uses (issue / comments / transitions / attachments / edit meta,
-    search, myself, attachment content) and methods GET / POST / PUT (no DELETE);
-  - never following redirects (the credentials could otherwise leave the Jira host).
-Every call is logged with the console user who asked for it.
+Listens on JIRA_GATEWAY_PORT (7001) inside the Docker network. Needs the JIRA_GATEWAY_TOKEN header (no token
+configured = off), allows GET / POST / PUT on the Jira API paths the console uses, does not follow redirects and
+logs the console user of every call.
 """
 import hmac
 import logging
